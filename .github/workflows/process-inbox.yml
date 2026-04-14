@@ -1,0 +1,30 @@
+name: Process Inbox (polling)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Note: GitHub Actions schedule is best-effort and may not run exactly every 5 minutes.
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: process-inbox-polling
+  cancel-in-progress: false
+
+jobs:
+  process-inbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Call /jobs/process-inbox
+        env:
+          JOB_SECRET: ${{ secrets.JOB_SECRET }}
+        run: |
+          if [ -z "${JOB_SECRET}" ]; then
+            echo "Missing GitHub Secret: JOB_SECRET"
+            exit 1
+          fi
+
+          curl -sS -X POST "https://agencizc.onrender.com/jobs/process-inbox" \
+            -H "Content-Type: application/json" \
+            -H "X-Job-Secret: ${JOB_SECRET}" \
+            --data '{"limit":10,"query":"in:inbox newer_than:7d"}'

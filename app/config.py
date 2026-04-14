@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     google_access_token: str | None = Field(default=None, alias="GOOGLE_ACCESS_TOKEN")
     gmail_user_email: str | None = Field(default=None, alias="GMAIL_USER_EMAIL")
 
+    # Jobs / scheduler
+    job_secret: str | None = Field(default=None, alias="JOB_SECRET")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -158,14 +158,37 @@ To jest wersja pollingowa (bez webhooków Gmail push).
 ### POST /jobs/process-inbox
 Uruchamia job przetwarzania ostatnich N wiadomości. Pomija wiadomości z labelem `AI/Processed`.
 
+#### Zabezpieczenie (dla schedulera)
+Ustaw w środowisku `JOB_SECRET` i wywołuj endpoint z nagłówkiem `X-Job-Secret`.
+
 Przykład:
 
 ```bash
 curl -s http://127.0.0.1:8000/jobs/process-inbox \
   -H "Content-Type: application/json" \
+  -H "X-Job-Secret: <JOB_SECRET>" \
   -d '{"limit": 10, "query": "in:inbox newer_than:7d"}'
 ```
 
 ### Jak odpalać cyklicznie na Render (na razie ręcznie)
 - Najprościej: zewnętrzny “uptime monitor / cron” który uderza w `POST /jobs/process-inbox` co X minut.
 - Docelowo: Render cron/background worker (w kolejnym kroku).
+
+## GitHub Actions — polling co 5 minut
+Repo zawiera workflow `.github/workflows/process-inbox.yml`, który cyklicznie (co ~5 min) wykonuje `POST` na produkcyjny endpoint Render:
+- `POST https://agencizc.onrender.com/jobs/process-inbox`
+
+### Jak ustawić GitHub Secret
+1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**
+2. Kliknij **New repository secret**
+3. Nazwa: `JOB_SECRET`
+4. Wartość: taka sama jak `JOB_SECRET` ustawiony na Render (wartość do nagłówka `X-Job-Secret`)
+
+### Jak odpalić workflow ręcznie
+1. GitHub → zakładka **Actions**
+2. Wybierz workflow **Process Inbox (polling)**
+3. Kliknij **Run workflow**
+
+### Jak sprawdzić logi i czy działa co 5 minut
+- GitHub → **Actions** → wybierz ostatnie uruchomienie workflow → sprawdź logi kroku **Call /jobs/process-inbox**
+- Workflow uruchamia się także z `schedule` (cron). Uwaga: harmonogram GitHub Actions jest **best-effort** (może mieć opóźnienia), ale będzie wykonywał wywołania cyklicznie.

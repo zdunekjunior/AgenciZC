@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.agents.email_agent import EmailAgent
 from app.config import Settings, get_settings
@@ -37,10 +38,24 @@ def get_inbox_processor(
     return InboxProcessor(gmail=gmail, agent=agent)
 
 
+def require_job_secret(
+    settings: Settings = Depends(get_settings),
+    x_job_secret: str | None = Header(default=None, alias="X-Job-Secret"),
+) -> None:
+    configured = (settings.job_secret or "").strip()
+    if not configured:
+        # Dev-friendly mode: allow if secret not configured.
+        log.warning("JOB_SECRET not set; /jobs/process-inbox is unsecured (dev mode)")
+        return
+    if not x_job_secret or not secrets.compare_digest(x_job_secret, configured):
+        raise HTTPException(status_code=403, detail="Invalid X-Job-Secret")
+
+
 @router.post("/process-inbox", response_model=ProcessInboxResponse)
 def process_inbox(
     payload: ProcessInboxRequest,
     job: InboxProcessor = Depends(get_inbox_processor),
+    _: None = Depends(require_job_secret),
 ) -> ProcessInboxResponse:
     stats = job.process_inbox(limit=payload.limit, query=payload.query)
     log.info(

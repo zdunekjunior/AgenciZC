@@ -95,3 +95,40 @@ def test_process_inbox_skips_already_processed_and_summarizes() -> None:
     assert data["skipped"] == 1
     assert set(data["processed_message_ids"]) == {"m_human", "m_noreply"}
 
+
+def test_process_inbox_requires_secret_when_configured(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from app.api.routes.jobs import get_email_agent, get_gmail_service
+
+    app = create_app()
+
+    class StubGmail:
+        def ensure_label(self, *, name: str) -> str:  # type: ignore[no-untyped-def]
+            return "LBL_PROCESSED"
+
+        def list_message_metadatas(self, *, limit: int = 10, query: str | None = None):  # type: ignore[no-untyped-def]
+            return []
+
+    class StubAgent:
+        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+            raise AssertionError("not used")
+
+    app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
+    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+
+    # Configure secret via env + clear Settings cache
+    monkeypatch.setenv("JOB_SECRET", "s3cr3t")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+
+    resp_missing = client.post("/jobs/process-inbox", json={"limit": 1})
+    assert resp_missing.status_code == 403
+
+    resp_wrong = client.post("/jobs/process-inbox", json={"limit": 1}, headers={"X-Job-Secret": "wrong"})
+    assert resp_wrong.status_code == 403
+
+    resp_ok = client.post("/jobs/process-inbox", json={"limit": 1}, headers={"X-Job-Secret": "s3cr3t"})
+    assert resp_ok.status_code == 200
+
