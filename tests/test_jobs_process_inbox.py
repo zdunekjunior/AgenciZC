@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from app.main import create_app
+
+
+def test_process_inbox_skips_already_processed_and_summarizes() -> None:
+    from app.api.routes.jobs import get_email_agent, get_gmail_service
+    from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
+    from app.schemas.email import AgentResult, EmailInput
+
+    app = create_app()
+
+    processed_label_id = "LBL_PROCESSED"
+
+    class StubGmail:
+        def ensure_label(self, *, name: str) -> str:  # type: ignore[no-untyped-def]
+            assert name == "AI/Processed"
+            return processed_label_id
+
+        def list_message_metadatas(self, *, limit: int = 10, query: str | None = None):  # type: ignore[no-untyped-def]
+            return [
+                {"id": "m_processed", "labelIds": [processed_label_id]},
+                {"id": "m_human", "labelIds": []},
+                {"id": "m_noreply", "labelIds": []},
+            ]
+
+        def fetch_message(self, *, message_id: str):  # type: ignore[no-untyped-def]
+            return {"id": message_id, "threadId": "t1", "payload": {"headers": []}}
+
+        def fetch_email_input(self, *, message_id: str):  # type: ignore[no-untyped-def]
+            sender = "person@example.com"
+            subject = "Hello"
+            body = "Hi"
+            if message_id == "m_noreply":
+                sender = "no-reply@google.com"
+                subject = "Security alert"
+                body = "Security alert: new sign-in"
+            return EmailInput(
+                message_id=message_id,
+                thread_id="t1",
+                subject=subject,
+                sender=sender,
+                recipients=["me@example.com"],
+                body_text=body,
+                thread_context=[],
+            )
+
+        def create_reply_draft(self, *, original_message, draft_reply: str):  # type: ignore[no-untyped-def]
+            assert draft_reply.strip()
+            return "d1"
+
+        def apply_labels(self, *, message_id: str, label_names: list[str]):  # type: ignore[no-untyped-def]
+            assert "AI/Processed" in label_names
+            return label_names
+
+    class StubAgent:
+        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+            if "no-reply" in (str(email.sender) if email.sender else ""):
+                return AgentResult(
+                    category=Category.other,
+                    priority=Priority.medium,
+                    summary="s",
+                    needs_human_approval=True,
+                    recommended_action=RecommendedAction.ignore,
+                    draft_reply="",
+                    reasoning_notes="n",
+                    suggested_tool=SuggestedTool.none,
+                    confidence=0.9,
+                )
+            return AgentResult(
+                category=Category.other,
+                priority=Priority.medium,
+                summary="s",
+                needs_human_approval=False,
+                recommended_action=RecommendedAction.draft_for_review,
+                draft_reply="Hello",
+                reasoning_notes="n",
+                suggested_tool=SuggestedTool.none,
+                confidence=0.9,
+            )
+
+    app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
+    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+
+    client = TestClient(app)
+    resp = client.post("/jobs/process-inbox", json={"limit": 10})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["checked"] == 3
+    assert data["skipped_already_processed"] == 1
+    assert data["analyzed"] == 2
+    assert data["drafts_created"] == 1
+    assert data["skipped"] == 1
+    assert set(data["processed_message_ids"]) == {"m_human", "m_noreply"}
+

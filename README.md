@@ -151,3 +151,21 @@ curl -s http://127.0.0.1:8000/gmail/analyze-and-create-draft \
   -H "Content-Type: application/json" \
   -d '{"message_id":"<GMAIL_MESSAGE_ID>"}'
 ```
+
+## Jobs (polling) — przetwarzanie inboxu
+To jest wersja pollingowa (bez webhooków Gmail push).
+
+### POST /jobs/process-inbox
+Uruchamia job przetwarzania ostatnich N wiadomości. Pomija wiadomości z labelem `AI/Processed`.
+
+Przykład:
+
+```bash
+curl -s http://127.0.0.1:8000/jobs/process-inbox \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 10, "query": "in:inbox newer_than:7d"}'
+```
+
+### Jak odpalać cyklicznie na Render (na razie ręcznie)
+- Najprościej: zewnętrzny “uptime monitor / cron” który uderza w `POST /jobs/process-inbox` co X minut.
+- Docelowo: Render cron/background worker (w kolejnym kroku).

@@ -75,13 +75,13 @@ class GmailApiClient:
         )
 
     def list_messages(self, *, user_id: str, max_results: int = 10) -> dict[str, Any]:
-        return (
-            self.service()
-            .users()
-            .messages()
-            .list(userId=user_id, maxResults=max_results)
-            .execute()
-        )
+        return self.list_messages_with_query(user_id=user_id, max_results=max_results, query=None)
+
+    def list_messages_with_query(self, *, user_id: str, max_results: int = 10, query: str | None = None) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"userId": user_id, "maxResults": max_results}
+        if query:
+            kwargs["q"] = query
+        return self.service().users().messages().list(**kwargs).execute()
 
     def get_thread(self, *, user_id: str, thread_id: str) -> dict[str, Any]:
         return (

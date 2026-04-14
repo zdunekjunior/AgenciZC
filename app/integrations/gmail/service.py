@@ -92,6 +92,29 @@ class GmailService:
             log.exception("Gmail list_messages failed")
             raise GmailApiError("Gmail API error while listing messages", status_code=status) from exc
 
+    def list_message_metadatas(self, *, limit: int = 10, query: str | None = None) -> list[dict[str, Any]]:
+        """
+        List last N messages (optionally filtered by Gmail query) and return metadata payloads.
+        """
+
+        try:
+            listing = self._client.list_messages_with_query(user_id=self._client.user_id, max_results=limit, query=query)
+            msgs = listing.get("messages") or []
+            if not isinstance(msgs, list):
+                return []
+            out: list[dict[str, Any]] = []
+            for m in msgs:
+                mid = m.get("id")
+                if not mid:
+                    continue
+                meta = self._client.get_message_metadata(user_id=self._client.user_id, message_id=mid)
+                out.append(meta)
+            return out
+        except HttpError as exc:
+            status = getattr(getattr(exc, "resp", None), "status", None)
+            log.exception("Gmail list_message_metadatas failed")
+            raise GmailApiError("Gmail API error while listing messages", status_code=status) from exc
+
     def ensure_label(self, *, name: str) -> str:
         """
         Ensure a user label exists and return its id.
