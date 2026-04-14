@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.agents.email_agent import EmailAgent
+from app.config import Settings, get_settings
+from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
+from app.domain.enums import RecommendedAction
+from app.schemas.email import AgentResult
+from app.schemas.gmail import (
+    GmailAnalyzeAndDraftResult,
+    GmailAnalyzeResult,
+    GmailDraftResult,
+    GmailMessageListItem,
+    GmailMessageRequest,
+    GmailMessagesListResponse,
+)
+from app.services.openai_client import OpenAIResponsesClient
+
+router = APIRouter()
+log = logging.getLogger(__name__)
+
+
+def get_openai_client(settings: Settings = Depends(get_settings)) -> OpenAIResponsesClient:
+    return OpenAIResponsesClient.from_settings(settings)
+
+
+def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) -> EmailAgent:
+    return EmailAgent(client=client)
+
+
+def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailService:
+    try:
+        return GmailService.from_settings(settings)
+    except GmailNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Gmail integration not configured: {exc}",
+        ) from exc
+
+
+def _map_gmail_error(exc: GmailApiError) -> HTTPException:
+    if exc.status_code == 404:
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=502, detail="Gmail API error (see server logs)")
+
+
+def _headers_map(msg: dict) -> dict[str, str]:
+    headers = msg.get("payload", {}).get("headers", []) or []
+    out: dict[str, str] = {}
+    for h in headers:
+        name = (h.get("name") or "").strip().lower()
+        value = (h.get("value") or "").strip()
+        if name:
+            out[name] = value
+    return out
+
+
+@router.post("/analyze-message", response_model=GmailAnalyzeResult)
+def analyze_message(
+    payload: GmailMessageRequest,
+    gmail: GmailService = Depends(get_gmail_service),
+    agent: EmailAgent = Depends(get_email_agent),
+) -> GmailAnalyzeResult:
+    try:
+        msg = gmail.fetch_message(message_id=payload.message_id)
+        email_input = gmail.fetch_email_input(message_id=payload.message_id)
+    except GmailApiError as exc:
+        raise _map_gmail_error(exc) from exc
+    result: AgentResult = agent.analyze_email(email_input)
+
+    return GmailAnalyzeResult(
+        analysis=result.model_dump(),
+        gmail_message_id=payload.message_id,
+        gmail_thread_id=msg.get("threadId"),
+    )
+
+
+@router.post("/analyze-and-create-draft", response_model=GmailAnalyzeAndDraftResult)
+def analyze_and_create_draft(
+    payload: GmailMessageRequest,
+    gmail: GmailService = Depends(get_gmail_service),
+    agent: EmailAgent = Depends(get_email_agent),
+) -> GmailAnalyzeAndDraftResult:
+    try:
+        msg = gmail.fetch_message(message_id=payload.message_id)
+        email_input = gmail.fetch_email_input(message_id=payload.message_id)
+    except GmailApiError as exc:
+        raise _map_gmail_error(exc) from exc
+    result: AgentResult = agent.analyze_email(email_input)
+
+    draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason=None)
+    action_taken = "skipped"
+    label_names = ["AI/Analyzed", "AI/Skipped"]
+
+    # Hard block: do not create drafts for ignore/system/no-reply.
+    if result.recommended_action == RecommendedAction.ignore or not (result.draft_reply and result.draft_reply.strip()):
+        draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason="auto_system_message")
+    else:
+        try:
+            draft_id = gmail.create_reply_draft(original_message=msg, draft_reply=result.draft_reply)
+            draft_status = GmailDraftResult(status="created", draft_id=draft_id, error=None, reason=None)
+            action_taken = "draft_created"
+            label_names = ["AI/Analyzed", "AI/DraftCreated"]
+        except HTTPException as exc:
+            draft_status = GmailDraftResult(status="error", draft_id=None, error=str(exc.detail), reason=None)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Draft creation failed")
+            draft_status = GmailDraftResult(status="error", draft_id=None, error=str(exc), reason=None)
+
+    label_applied: list[str] = []
+    try:
+        label_applied = gmail.apply_labels(message_id=payload.message_id, label_names=label_names)
+    except Exception:  # noqa: BLE001
+        # Labeling should not break main flow; log and continue.
+        log.exception("Failed to apply Gmail labels")
+
+    return GmailAnalyzeAndDraftResult(
+        analysis=result.model_dump(),
+        gmail_message_id=payload.message_id,
+        gmail_thread_id=msg.get("threadId"),
+        draft=draft_status,
+        label_applied=label_applied,
+        action_taken=action_taken,
+    )
+
+
+@router.get("/messages", response_model=GmailMessagesListResponse)
+def list_messages(
+    limit: int = 10,
+    gmail: GmailService = Depends(get_gmail_service),
+) -> GmailMessagesListResponse:
+    if limit < 1 or limit > 50:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 50")
+
+    try:
+        metas = gmail.list_recent_messages(limit=limit)
+    except GmailApiError as exc:
+        raise _map_gmail_error(exc) from exc
+
+    items: list[GmailMessageListItem] = []
+    for m in metas:
+        headers = _headers_map(m)
+        internal_ms = m.get("internalDate")
+        internal_dt: datetime | None = None
+        try:
+            if internal_ms is not None:
+                internal_dt = datetime.fromtimestamp(int(internal_ms) / 1000, tz=timezone.utc)
+        except Exception:
+            internal_dt = None
+
+        items.append(
+            GmailMessageListItem(
+                message_id=m.get("id", ""),
+                thread_id=m.get("threadId"),
+                subject=headers.get("subject"),
+                from_email=headers.get("from"),
+                snippet=m.get("snippet"),
+                internal_date=internal_dt,
+            )
+        )
+
+    items = [x for x in items if x.message_id]
+    return GmailMessagesListResponse(messages=items)
+
+
+@router.get("/threads/{thread_id}")
+def get_thread(thread_id: str, gmail: GmailService = Depends(get_gmail_service)) -> dict:
+    """
+    Developer endpoint: return raw thread payload for debugging.
+    """
+
+    try:
+        thread = gmail.fetch_thread(thread_id=thread_id)
+    except GmailApiError as exc:
+        raise _map_gmail_error(exc) from exc
+    return thread
+
