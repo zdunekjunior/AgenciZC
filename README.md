@@ -202,6 +202,30 @@ Projekt jest przygotowany pod rozwój w kierunku wielu agentów (team-of-agents)
 - **Krok 3 (ResearchAgent)**: bez web searchu — generuje `research_summary`, listę brakujących informacji i rekomendowane pytania doprecyzowujące.
 - **Krok 4 (DraftAgent)**: buduje bardziej konkretny draft z lepszą strukturą i pytaniami doprecyzowującymi.
 
+## Approval flow (draft-first, human-in-the-loop)
+System **nigdy nie wysyła maili automatycznie**. Każdy utworzony draft trafia do kolejki zatwierdzeń.
+
+### Statusy draftów
+- `pending_review` — oczekuje na decyzję człowieka
+- `approved` — zatwierdzony (gotowy pod przyszły krok “send”)
+- `rejected` — odrzucony
+- `sent` — zarezerwowane pod przyszłe wysyłanie
+
+### Endpointy developerskie
+- `GET /drafts/pending` — lista draftów do przejrzenia
+- `POST /drafts/{draft_id}/approve` — zatwierdź draft
+- `POST /drafts/{draft_id}/reject` — odrzuć draft
+- `POST /drafts/{draft_id}/send` — wyślij draft (**tylko jeśli status=approved**)
+
+### Jak to działa (high-level)
+1. Email wpada → orchestrator uruchamia agentów.
+2. Jeśli powstaje draft (np. przez `POST /gmail/analyze-and-create-draft` albo job polling), Gmail tworzy draft i zwraca `draft_id`.
+3. Backend zapisuje draft w repozytorium z `status=pending_review`.
+4. Człowiek przegląda `GET /drafts/pending` i podejmuje decyzję approve/reject.
+5. Jeśli `approved`, można wysłać draft przez `POST /drafts/{draft_id}/send` (status przechodzi na `sent`).
+
+Uwaga: repozytorium jest na razie **in-memory (process-local)** — docelowo do podmiany na DB bez zmian w API.
+
 ### Jak ustawić GitHub Secret
 1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**
 2. Kliknij **New repository secret**

@@ -214,3 +214,18 @@ class GmailService:
             raise HTTPException(status_code=502, detail="Gmail draft creation returned no draft id")
         return draft_id
 
+    def send_draft(self, *, draft_id: str) -> dict[str, Any]:
+        """
+        Sends an existing Gmail draft by id.
+        Returns Gmail API response payload (message resource).
+        """
+
+        try:
+            return self._client.send_draft(user_id=self._client.user_id, draft_id=draft_id)
+        except HttpError as exc:
+            status = getattr(getattr(exc, "resp", None), "status", None)
+            if status == 404:
+                raise GmailApiError("Gmail draft not found", status_code=404) from exc
+            log.exception("Gmail send_draft failed")
+            raise GmailApiError("Gmail API error while sending draft", status_code=status) from exc
+

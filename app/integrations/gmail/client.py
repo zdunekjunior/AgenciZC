@@ -98,6 +98,9 @@ class GmailApiClient:
             body["message"]["threadId"] = thread_id
         return self.service().users().drafts().create(userId=user_id, body=body).execute()
 
+    def send_draft(self, *, user_id: str, draft_id: str) -> dict[str, Any]:
+        return self.service().users().drafts().send(userId=user_id, body={"id": draft_id}).execute()
+
     def list_labels(self, *, user_id: str) -> dict[str, Any]:
         return self.service().users().labels().list(userId=user_id).execute()
 

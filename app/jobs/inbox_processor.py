@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from app.api.routes.drafts import get_draft_service
+from app.drafts.service import DraftApprovalService
 from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.domain.enums import RecommendedAction
 from app.integrations.gmail.service import GmailService
@@ -39,9 +41,10 @@ class InboxProcessor:
     Polling inbox processor (no background workers).
     """
 
-    def __init__(self, *, gmail: GmailService, agent: EmailOrchestrator) -> None:
+    def __init__(self, *, gmail: GmailService, agent: EmailOrchestrator, drafts: DraftApprovalService | None = None) -> None:
         self._gmail = gmail
         self._agent = agent
+        self._drafts = drafts or get_draft_service()
 
     def process_inbox(self, *, limit: int = 10, query: str | None = None) -> InboxProcessStats:
         if limit < 1:
@@ -86,8 +89,15 @@ class InboxProcessor:
 
             if create_draft:
                 try:
-                    self._gmail.create_reply_draft(original_message=msg, draft_reply=result.draft_reply)
+                    draft_id = self._gmail.create_reply_draft(original_message=msg, draft_reply=result.draft_reply)
                     drafts_created += 1
+                    self._drafts.register_new_draft(
+                        draft_id=draft_id,
+                        provider="gmail",
+                        message_id=mid,
+                        thread_id=msg.get("threadId"),
+                        draft_body=result.draft_reply,
+                    )
                     self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_DRAFT_CREATED])
                 except Exception:  # noqa: BLE001
                     log.exception("Draft creation failed; marking as skipped")

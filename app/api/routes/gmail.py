@@ -10,6 +10,8 @@ from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
 from app.agents.team.research_agent import ResearchAgent
 from app.config import Settings, get_settings
+from app.api.routes.drafts import get_draft_service
+from app.drafts.service import DraftApprovalService
 from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
 from app.domain.enums import RecommendedAction
 from app.orchestrator.email_orchestrator import EmailOrchestrator
@@ -95,6 +97,7 @@ def analyze_and_create_draft(
     payload: GmailMessageRequest,
     gmail: GmailService = Depends(get_gmail_service),
     orch: EmailOrchestrator = Depends(get_orchestrator),
+    drafts: DraftApprovalService = Depends(get_draft_service),
 ) -> GmailAnalyzeAndDraftResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
@@ -116,6 +119,14 @@ def analyze_and_create_draft(
             draft_status = GmailDraftResult(status="created", draft_id=draft_id, error=None, reason=None)
             action_taken = "draft_created"
             label_names = ["AI/Analyzed", "AI/DraftCreated"]
+            # Register for human approval (pending_review).
+            drafts.register_new_draft(
+                draft_id=draft_id,
+                provider="gmail",
+                message_id=payload.message_id,
+                thread_id=msg.get("threadId"),
+                draft_body=result.draft_reply,
+            )
         except HTTPException as exc:
             draft_status = GmailDraftResult(status="error", draft_id=None, error=str(exc.detail), reason=None)
         except Exception as exc:  # noqa: BLE001
