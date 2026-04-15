@@ -5,10 +5,17 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 
 
-def test_process_inbox_skips_already_processed_and_summarizes() -> None:
-    from app.api.routes.jobs import get_email_agent, get_gmail_service
+def test_process_inbox_skips_already_processed_and_summarizes(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from app.api.routes.jobs import get_orchestrator, get_gmail_service
     from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
     from app.schemas.email import AgentResult, EmailInput
+
+    # Ensure dev-mode (no JOB_SECRET) regardless of local .env
+    # (env vars take precedence over env_file in Settings)
+    monkeypatch.setenv("JOB_SECRET", "")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
 
     app = create_app()
 
@@ -56,7 +63,7 @@ def test_process_inbox_skips_already_processed_and_summarizes() -> None:
             return label_names
 
     class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             if "no-reply" in (str(email.sender) if email.sender else ""):
                 return AgentResult(
                     category=Category.other,
@@ -82,7 +89,7 @@ def test_process_inbox_skips_already_processed_and_summarizes() -> None:
             )
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubAgent()
 
     client = TestClient(app)
     resp = client.post("/jobs/process-inbox", json={"limit": 10})
@@ -97,7 +104,7 @@ def test_process_inbox_skips_already_processed_and_summarizes() -> None:
 
 
 def test_process_inbox_requires_secret_when_configured(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from app.api.routes.jobs import get_email_agent, get_gmail_service
+    from app.api.routes.jobs import get_orchestrator, get_gmail_service
 
     app = create_app()
 
@@ -109,11 +116,11 @@ def test_process_inbox_requires_secret_when_configured(monkeypatch) -> None:  # 
             return []
 
     class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             raise AssertionError("not used")
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubAgent()
 
     # Configure secret via env + clear Settings cache
     monkeypatch.setenv("JOB_SECRET", "s3cr3t")

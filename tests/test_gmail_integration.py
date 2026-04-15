@@ -22,7 +22,7 @@ def test_gmail_not_configured_returns_503(monkeypatch) -> None:  # type: ignore[
 
 
 def test_analyze_message_nonexistent_id_returns_404(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from app.api.routes.gmail import get_email_agent, get_gmail_service
+    from app.api.routes.gmail import get_gmail_service, get_orchestrator
     from app.integrations.gmail.service import GmailApiError
 
     app = create_app()
@@ -34,12 +34,12 @@ def test_analyze_message_nonexistent_id_returns_404(monkeypatch) -> None:  # typ
         def fetch_email_input(self, *, message_id: str):  # type: ignore[no-untyped-def]
             raise AssertionError("Should not be called when message missing")
 
-    class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+    class StubOrch:
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             raise AssertionError("Should not be called when message missing")
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubOrch()
 
     client = TestClient(app)
     resp = client.post("/gmail/analyze-message", json={"message_id": "missing"})
@@ -74,7 +74,7 @@ def test_list_messages_with_mocked_gmail(monkeypatch) -> None:  # type: ignore[n
 
 
 def test_create_draft_skipped_when_draft_reply_empty(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from app.api.routes.gmail import get_email_agent, get_gmail_service
+    from app.api.routes.gmail import get_gmail_service, get_orchestrator
 
     app = create_app()
 
@@ -103,8 +103,8 @@ def test_create_draft_skipped_when_draft_reply_empty(monkeypatch) -> None:  # ty
             assert "AI/Skipped" in label_names
             return label_names
 
-    class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+    class StubOrch:
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
             from app.schemas.email import AgentResult
 
@@ -121,7 +121,7 @@ def test_create_draft_skipped_when_draft_reply_empty(monkeypatch) -> None:  # ty
             )
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubOrch()
 
     client = TestClient(app)
     resp = client.post("/gmail/analyze-and-create-draft", json={"message_id": "m1"})
@@ -134,7 +134,7 @@ def test_create_draft_skipped_when_draft_reply_empty(monkeypatch) -> None:  # ty
 
 
 def test_create_draft_success_with_mocked_gmail(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from app.api.routes.gmail import get_email_agent, get_gmail_service
+    from app.api.routes.gmail import get_gmail_service, get_orchestrator
 
     app = create_app()
 
@@ -164,8 +164,8 @@ def test_create_draft_success_with_mocked_gmail(monkeypatch) -> None:  # type: i
             assert "AI/DraftCreated" in label_names
             return label_names
 
-    class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+    class StubOrch:
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
             from app.schemas.email import AgentResult
 
@@ -182,7 +182,7 @@ def test_create_draft_success_with_mocked_gmail(monkeypatch) -> None:  # type: i
             )
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubOrch()
 
     client = TestClient(app)
     resp = client.post("/gmail/analyze-and-create-draft", json={"message_id": "m1"})
@@ -195,7 +195,7 @@ def test_create_draft_success_with_mocked_gmail(monkeypatch) -> None:  # type: i
 
 
 def test_create_draft_skipped_when_agent_recommended_ignore(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from app.api.routes.gmail import get_email_agent, get_gmail_service
+    from app.api.routes.gmail import get_gmail_service, get_orchestrator
 
     app = create_app()
 
@@ -224,8 +224,8 @@ def test_create_draft_skipped_when_agent_recommended_ignore(monkeypatch) -> None
             assert "AI/Skipped" in label_names
             return label_names
 
-    class StubAgent:
-        def analyze_email(self, email):  # type: ignore[no-untyped-def]
+    class StubOrch:
+        def handle_email(self, email):  # type: ignore[no-untyped-def]
             from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
             from app.schemas.email import AgentResult
 
@@ -242,7 +242,7 @@ def test_create_draft_skipped_when_agent_recommended_ignore(monkeypatch) -> None
             )
 
     app.dependency_overrides[get_gmail_service] = lambda: StubGmail()
-    app.dependency_overrides[get_email_agent] = lambda: StubAgent()
+    app.dependency_overrides[get_orchestrator] = lambda: StubOrch()
 
     client = TestClient(app)
     resp = client.post("/gmail/analyze-and-create-draft", json={"message_id": "m1"})

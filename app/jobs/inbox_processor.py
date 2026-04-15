@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from app.agents.email_agent import EmailAgent
+from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.domain.enums import RecommendedAction
 from app.integrations.gmail.service import GmailService
 from app.schemas.email import AgentResult
@@ -39,7 +39,7 @@ class InboxProcessor:
     Polling inbox processor (no background workers).
     """
 
-    def __init__(self, *, gmail: GmailService, agent: EmailAgent) -> None:
+    def __init__(self, *, gmail: GmailService, agent: EmailOrchestrator) -> None:
         self._gmail = gmail
         self._agent = agent
 
@@ -78,7 +78,7 @@ class InboxProcessor:
                 log.exception("Failed to fetch message/thread for processing")
                 continue
 
-            result: AgentResult = self._agent.analyze_email(email_input)
+            result: AgentResult = self._agent.handle_email(email_input)
             analyzed += 1
 
             action = result.recommended_action

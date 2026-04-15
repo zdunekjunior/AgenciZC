@@ -6,9 +6,13 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.agents.email_agent import EmailAgent
+from app.agents.team.draft_agent import DraftAgent
+from app.agents.team.inbox_agent import InboxAgent
+from app.agents.team.research_agent import ResearchAgent
 from app.config import Settings, get_settings
 from app.integrations.gmail.service import GmailNotConfiguredError, GmailService
 from app.jobs.inbox_processor import InboxProcessor
+from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.schemas.jobs import ProcessInboxRequest, ProcessInboxResponse
 from app.services.openai_client import OpenAIResponsesClient
 
@@ -24,6 +28,13 @@ def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) 
     return EmailAgent(client=client)
 
 
+def get_orchestrator(email_agent: EmailAgent = Depends(get_email_agent)) -> EmailOrchestrator:
+    inbox_agent = InboxAgent(email_agent=email_agent)
+    draft_agent = DraftAgent()
+    research_agent = ResearchAgent()
+    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent)
+
+
 def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailService:
     try:
         return GmailService.from_settings(settings)
@@ -33,7 +44,7 @@ def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailServic
 
 def get_inbox_processor(
     gmail: GmailService = Depends(get_gmail_service),
-    agent: EmailAgent = Depends(get_email_agent),
+    agent: EmailOrchestrator = Depends(get_orchestrator),
 ) -> InboxProcessor:
     return InboxProcessor(gmail=gmail, agent=agent)
 

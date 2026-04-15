@@ -178,6 +178,22 @@ curl -s http://127.0.0.1:8000/jobs/process-inbox \
 Repo zawiera workflow `.github/workflows/process-inbox.yml`, który cyklicznie (co ~5 min) wykonuje `POST` na produkcyjny endpoint Render:
 - `POST https://agencizc.onrender.com/jobs/process-inbox`
 
+## Architektura: orchestrator + zespół agentów
+Projekt jest przygotowany pod rozwój w kierunku wielu agentów (team-of-agents) bez zmiany publicznych endpointów.
+
+### Warstwy (high-level)
+- **API** (`app/api/routes/*`): endpointy HTTP (kompatybilne wstecz).
+- **Orchestrator** (`app/orchestrator/email_orchestrator.py`): decyzja “który agent i w jakiej kolejności”.
+- **Agenci** (`app/agents/team/*`):
+  - `InboxAgent`: analiza maila (klasyfikacja + wstępny draft) — obecnie reuse istniejącego `EmailAgent`.
+  - `DraftAgent`: finalizacja/validacja draftu (na razie pass-through).
+  - `ResearchAgent`: stub z gotowym kontraktem (na razie bez prawdziwego web search).
+
+### Jak dodać kolejnego agenta
+1. Dodaj plik w `app/agents/team/` implementujący kontrakt z `app/agents/team/contracts.py` (`name` + `run()`).
+2. Dodaj routing w `EmailOrchestrator.handle_email()` (kiedy i z jakim inputem agent ma być wywołany).
+3. Dopisz test routingu w `tests/` (spy/stub agent + asercje wywołań).
+
 ### Jak ustawić GitHub Secret
 1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**
 2. Kliknij **New repository secret**

@@ -6,9 +6,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.agents.email_agent import EmailAgent
+from app.agents.team.draft_agent import DraftAgent
+from app.agents.team.inbox_agent import InboxAgent
+from app.agents.team.research_agent import ResearchAgent
 from app.config import Settings, get_settings
 from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
 from app.domain.enums import RecommendedAction
+from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.schemas.email import AgentResult
 from app.schemas.gmail import (
     GmailAnalyzeAndDraftResult,
@@ -30,6 +34,13 @@ def get_openai_client(settings: Settings = Depends(get_settings)) -> OpenAIRespo
 
 def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) -> EmailAgent:
     return EmailAgent(client=client)
+
+
+def get_orchestrator(email_agent: EmailAgent = Depends(get_email_agent)) -> EmailOrchestrator:
+    inbox_agent = InboxAgent(email_agent=email_agent)
+    draft_agent = DraftAgent()
+    research_agent = ResearchAgent()
+    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent)
 
 
 def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailService:
@@ -63,14 +74,14 @@ def _headers_map(msg: dict) -> dict[str, str]:
 def analyze_message(
     payload: GmailMessageRequest,
     gmail: GmailService = Depends(get_gmail_service),
-    agent: EmailAgent = Depends(get_email_agent),
+    orch: EmailOrchestrator = Depends(get_orchestrator),
 ) -> GmailAnalyzeResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
         email_input = gmail.fetch_email_input(message_id=payload.message_id)
     except GmailApiError as exc:
         raise _map_gmail_error(exc) from exc
-    result: AgentResult = agent.analyze_email(email_input)
+    result: AgentResult = orch.handle_email(email_input)
 
     return GmailAnalyzeResult(
         analysis=result.model_dump(),
@@ -83,14 +94,14 @@ def analyze_message(
 def analyze_and_create_draft(
     payload: GmailMessageRequest,
     gmail: GmailService = Depends(get_gmail_service),
-    agent: EmailAgent = Depends(get_email_agent),
+    orch: EmailOrchestrator = Depends(get_orchestrator),
 ) -> GmailAnalyzeAndDraftResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
         email_input = gmail.fetch_email_input(message_id=payload.message_id)
     except GmailApiError as exc:
         raise _map_gmail_error(exc) from exc
-    result: AgentResult = agent.analyze_email(email_input)
+    result: AgentResult = orch.handle_email(email_input)
 
     draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason=None)
     action_taken = "skipped"
