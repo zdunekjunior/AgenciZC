@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inbox Assistant — Admin</title>
+    <link rel="stylesheet" href="/admin/assets/admin.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__title">Inbox Assistant</div>
+        <div class="brand__subtitle">Admin panel (drafts + audit)</div>
+      </div>
+      <div class="topbar__actions">
+        <button id="refreshBtn" class="btn btn--ghost">Odśwież</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Pending drafts</h2>
+          <div class="muted" id="pendingMeta">—</div>
+        </div>
+        <div class="panel__body">
+          <div id="pendingEmpty" class="empty hidden">Brak draftów do review.</div>
+          <table class="table" id="pendingTable">
+            <thead>
+              <tr>
+                <th>draft_id</th>
+                <th>provider</th>
+                <th>message_id</th>
+                <th>thread_id</th>
+                <th>created_at</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody id="pendingTbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Szczegóły</h2>
+          <div class="muted" id="selectedMeta">Nie wybrano draftu</div>
+        </div>
+        <div class="panel__body">
+          <div class="details">
+            <div class="details__row">
+              <div class="label">draft_id</div>
+              <div class="value" id="d_draft_id">—</div>
+            </div>
+            <div class="details__row">
+              <div class="label">provider</div>
+              <div class="value" id="d_provider">—</div>
+            </div>
+            <div class="details__row">
+              <div class="label">message_id</div>
+              <div class="value mono" id="d_message_id">—</div>
+            </div>
+            <div class="details__row">
+              <div class="label">thread_id</div>
+              <div class="value mono" id="d_thread_id">—</div>
+            </div>
+            <div class="details__row">
+              <div class="label">created_at</div>
+              <div class="value" id="d_created_at">—</div>
+            </div>
+            <div class="details__row">
+              <div class="label">status</div>
+              <div class="value" id="d_status">—</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__title">Preview</div>
+            <pre class="preview" id="d_preview">—</pre>
+          </div>
+
+          <div class="actions">
+            <button id="approveBtn" class="btn btn--primary" disabled>Approve</button>
+            <button id="rejectBtn" class="btn btn--danger" disabled>Reject</button>
+            <button id="sendBtn" class="btn btn--ok" disabled>Send</button>
+          </div>
+
+          <div class="card">
+            <div class="card__title">Audit log (dla draft_id)</div>
+            <div id="auditEmpty" class="empty hidden">Brak zdarzeń dla tej encji.</div>
+            <table class="table table--compact" id="auditTable">
+              <thead>
+                <tr>
+                  <th>timestamp</th>
+                  <th>action</th>
+                  <th>actor</th>
+                  <th>status</th>
+                  <th>metadata</th>
+                </tr>
+              </thead>
+              <tbody id="auditTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/admin/assets/admin.js"></script>
+  </body>
+</html>
+

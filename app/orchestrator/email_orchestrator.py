@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from app.agents.team.draft_agent import DraftAgent, DraftAgentInput
 from app.agents.team.inbox_agent import InboxAgent, InboxAgentInput
 from app.agents.team.research_agent import ResearchAgent, ResearchAgentInput, ResearchAgentOutput
+from app.audit.service import AuditLogService
+from app.domain.audit import ActorType, EntityType
 from app.domain.enums import Category, RecommendedAction
 from app.schemas.email import AgentResult, EmailInput
 
@@ -32,15 +34,28 @@ class EmailOrchestrator:
         inbox_agent: InboxAgent,
         draft_agent: DraftAgent,
         research_agent: ResearchAgent,
+        audit: AuditLogService | None = None,
     ) -> None:
         self._inbox = inbox_agent
         self._draft = draft_agent
         self._research = research_agent
+        self._audit = audit
 
     def handle_email(self, email: EmailInput) -> AgentResult:
         """
         Main orchestration entrypoint used by API endpoints and jobs.
         """
+
+        if self._audit is not None:
+            self._audit.log(
+                entity_type=EntityType.email,
+                entity_id=email.message_id,
+                action="email_analyzed",
+                actor_type=ActorType.orchestrator,
+                actor_name="EmailOrchestrator",
+                status="info",
+                metadata={"thread_id": email.thread_id, "subject": email.subject},
+            )
 
         inbox_run = self._inbox.run(InboxAgentInput(email=email))
         if inbox_run.output is None:
@@ -62,6 +77,19 @@ class EmailOrchestrator:
                 )
             )
             research_out = research_run.output
+            if self._audit is not None:
+                self._audit.log(
+                    entity_type=EntityType.workflow,
+                    entity_id=email.message_id,
+                    action="research_executed",
+                    actor_type=ActorType.agent,
+                    actor_name="ResearchAgent",
+                    status="ok" if research_out is not None else "error",
+                    metadata={
+                        "category": getattr(result.category, "value", str(result.category)),
+                        "has_output": bool(research_out),
+                    },
+                )
             # Keep the external shape compatible, but annotate reasoning.
             result = result.model_copy(
                 update={

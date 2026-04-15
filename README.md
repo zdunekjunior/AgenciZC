@@ -51,6 +51,32 @@ uvicorn app.main:app --reload
 
 API będzie dostępne pod `http://127.0.0.1:8000`, a Swagger pod `http://127.0.0.1:8000/docs`.
 
+## Panel admina (MVP)
+W projekcie jest prosty panel operacyjny, który korzysta z istniejących endpointów:
+- pending drafts
+- approve / reject / send
+- audit log
+
+### Jak uruchomić
+1. Uruchom backend:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+2. Wejdź w przeglądarce:
+- `http://127.0.0.1:8000/admin`
+
+### Jak używać (flow)
+1. **Pending**: po lewej wybierz draft z listy `pending_review`.
+2. **Szczegóły**: po prawej zobaczysz metadane i preview.
+3. **Decyzja**:
+   - **Approve** → `POST /drafts/{draft_id}/approve`
+   - **Reject** → `POST /drafts/{draft_id}/reject`
+4. **Send**:
+   - **Send** → `POST /drafts/{draft_id}/send` (działa tylko dla `approved`)
+5. **Audit**: na dole widać historię zdarzeń z `GET /audit/events/{draft_id}`.
+
 ## OpenAI: jak włączyć prawdziwy model
 1. Skopiuj `.env.example` do `.env`:
 
@@ -225,6 +251,23 @@ System **nigdy nie wysyła maili automatycznie**. Każdy utworzony draft trafia 
 5. Jeśli `approved`, można wysłać draft przez `POST /drafts/{draft_id}/send` (status przechodzi na `sent`).
 
 Uwaga: repozytorium jest na razie **in-memory (process-local)** — docelowo do podmiany na DB bez zmian w API.
+
+## Audit log i historia decyzji
+System zapisuje zdarzenia audytowe (in-memory, process-local), aby dało się odtworzyć historię działań agentów, orchestratora i człowieka.
+
+### Jakie zdarzenia są rejestrowane (minimum)
+- `email_analyzed`
+- `research_executed`
+- `draft_created`
+- `draft_moved_to_pending_review`
+- `draft_approved`
+- `draft_rejected`
+- `draft_sent`
+- `draft_send_failed`
+
+### Jak przeglądać historię
+- wszystkie zdarzenia: `GET /audit/events?limit=200`
+- zdarzenia dla encji (np. draft_id lub message_id): `GET /audit/events/{entity_id}?limit=200`
 
 ### Jak ustawić GitHub Secret
 1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**

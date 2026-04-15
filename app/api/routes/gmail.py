@@ -10,7 +10,10 @@ from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
 from app.agents.team.research_agent import ResearchAgent
 from app.config import Settings, get_settings
+from app.api.routes.audit import get_audit_service
 from app.api.routes.drafts import get_draft_service
+from app.audit.service import AuditLogService
+from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
 from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
 from app.domain.enums import RecommendedAction
@@ -38,11 +41,14 @@ def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) 
     return EmailAgent(client=client)
 
 
-def get_orchestrator(email_agent: EmailAgent = Depends(get_email_agent)) -> EmailOrchestrator:
+def get_orchestrator(
+    email_agent: EmailAgent = Depends(get_email_agent),
+    audit: AuditLogService = Depends(get_audit_service),
+) -> EmailOrchestrator:
     inbox_agent = InboxAgent(email_agent=email_agent)
     draft_agent = DraftAgent()
     research_agent = ResearchAgent()
-    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent)
+    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent, audit=audit)
 
 
 def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailService:
@@ -98,6 +104,7 @@ def analyze_and_create_draft(
     gmail: GmailService = Depends(get_gmail_service),
     orch: EmailOrchestrator = Depends(get_orchestrator),
     drafts: DraftApprovalService = Depends(get_draft_service),
+    audit: AuditLogService = Depends(get_audit_service),
 ) -> GmailAnalyzeAndDraftResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
@@ -110,6 +117,16 @@ def analyze_and_create_draft(
     action_taken = "skipped"
     label_names = ["AI/Analyzed", "AI/Skipped"]
 
+    audit.log(
+        entity_type=EntityType.email,
+        entity_id=payload.message_id,
+        action="email_analyzed",
+        actor_type=ActorType.system,
+        actor_name="gmail.analyze_and_create_draft",
+        status="ok",
+        metadata={"thread_id": msg.get("threadId")},
+    )
+
     # Hard block: do not create drafts for ignore/system/no-reply.
     if result.recommended_action == RecommendedAction.ignore or not (result.draft_reply and result.draft_reply.strip()):
         draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason="auto_system_message")
@@ -119,6 +136,15 @@ def analyze_and_create_draft(
             draft_status = GmailDraftResult(status="created", draft_id=draft_id, error=None, reason=None)
             action_taken = "draft_created"
             label_names = ["AI/Analyzed", "AI/DraftCreated"]
+            audit.log(
+                entity_type=EntityType.draft,
+                entity_id=draft_id,
+                action="draft_created",
+                actor_type=ActorType.system,
+                actor_name="GmailService",
+                status="ok",
+                metadata={"message_id": payload.message_id, "thread_id": msg.get("threadId")},
+            )
             # Register for human approval (pending_review).
             drafts.register_new_draft(
                 draft_id=draft_id,
@@ -126,6 +152,15 @@ def analyze_and_create_draft(
                 message_id=payload.message_id,
                 thread_id=msg.get("threadId"),
                 draft_body=result.draft_reply,
+            )
+            audit.log(
+                entity_type=EntityType.draft,
+                entity_id=draft_id,
+                action="draft_moved_to_pending_review",
+                actor_type=ActorType.system,
+                actor_name="DraftApprovalService",
+                status="ok",
+                metadata={},
             )
         except HTTPException as exc:
             draft_status = GmailDraftResult(status="error", draft_id=None, error=str(exc.detail), reason=None)

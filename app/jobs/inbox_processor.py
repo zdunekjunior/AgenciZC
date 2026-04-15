@@ -4,7 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from app.api.routes.audit import get_audit_service
 from app.api.routes.drafts import get_draft_service
+from app.audit.service import AuditLogService
+from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
 from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.domain.enums import RecommendedAction
@@ -45,6 +48,7 @@ class InboxProcessor:
         self._gmail = gmail
         self._agent = agent
         self._drafts = drafts or get_draft_service()
+        self._audit: AuditLogService = get_audit_service()
 
     def process_inbox(self, *, limit: int = 10, query: str | None = None) -> InboxProcessStats:
         if limit < 1:
@@ -84,6 +88,16 @@ class InboxProcessor:
             result: AgentResult = self._agent.handle_email(email_input)
             analyzed += 1
 
+            self._audit.log(
+                entity_type=EntityType.email,
+                entity_id=mid,
+                action="email_analyzed",
+                actor_type=ActorType.system,
+                actor_name="jobs.process_inbox",
+                status="ok",
+                metadata={"thread_id": msg.get("threadId")},
+            )
+
             action = result.recommended_action
             create_draft = action != RecommendedAction.ignore and bool(result.draft_reply and result.draft_reply.strip())
 
@@ -91,12 +105,30 @@ class InboxProcessor:
                 try:
                     draft_id = self._gmail.create_reply_draft(original_message=msg, draft_reply=result.draft_reply)
                     drafts_created += 1
+                    self._audit.log(
+                        entity_type=EntityType.draft,
+                        entity_id=draft_id,
+                        action="draft_created",
+                        actor_type=ActorType.system,
+                        actor_name="GmailService",
+                        status="ok",
+                        metadata={"message_id": mid, "thread_id": msg.get("threadId")},
+                    )
                     self._drafts.register_new_draft(
                         draft_id=draft_id,
                         provider="gmail",
                         message_id=mid,
                         thread_id=msg.get("threadId"),
                         draft_body=result.draft_reply,
+                    )
+                    self._audit.log(
+                        entity_type=EntityType.draft,
+                        entity_id=draft_id,
+                        action="draft_moved_to_pending_review",
+                        actor_type=ActorType.system,
+                        actor_name="DraftApprovalService",
+                        status="ok",
+                        metadata={},
                     )
                     self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_DRAFT_CREATED])
                 except Exception:  # noqa: BLE001
