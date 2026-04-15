@@ -194,6 +194,14 @@ Projekt jest przygotowany pod rozwój w kierunku wielu agentów (team-of-agents)
 2. Dodaj routing w `EmailOrchestrator.handle_email()` (kiedy i z jakim inputem agent ma być wywołany).
 3. Dopisz test routingu w `tests/` (spy/stub agent + asercje wywołań).
 
+### Pierwszy realny workflow multi-agent (Inbox + Research + Draft)
+- **Krok 1 (InboxAgent)**: analiza maila (kategoria/priorytet/summary + wstępny draft).
+- **Krok 2 (routing orchestratora)**:
+  - proste maile → `InboxAgent` + `DraftAgent`
+  - maile “biznesowo złożone” (oferta/partnerstwo/współpraca, `category=sales_inquiry|partnership`, słowa-klucze) → `InboxAgent` + `ResearchAgent` + `DraftAgent`
+- **Krok 3 (ResearchAgent)**: bez web searchu — generuje `research_summary`, listę brakujących informacji i rekomendowane pytania doprecyzowujące.
+- **Krok 4 (DraftAgent)**: buduje bardziej konkretny draft z lepszą strukturą i pytaniami doprecyzowującymi.
+
 ### Jak ustawić GitHub Secret
 1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**
 2. Kliknij **New repository secret**

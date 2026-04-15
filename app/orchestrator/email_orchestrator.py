@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 
 from app.agents.team.draft_agent import DraftAgent, DraftAgentInput
 from app.agents.team.inbox_agent import InboxAgent, InboxAgentInput
-from app.agents.team.research_agent import ResearchAgent, ResearchAgentInput
-from app.domain.enums import RecommendedAction, SuggestedTool
+from app.agents.team.research_agent import ResearchAgent, ResearchAgentInput, ResearchAgentOutput
+from app.domain.enums import Category, RecommendedAction
 from app.schemas.email import AgentResult, EmailInput
 
 
@@ -50,30 +50,69 @@ class EmailOrchestrator:
 
         result = inbox_run.output
 
-        # Routing decision: if model suggests research, call ResearchAgent (stub for now).
-        needs_research = result.suggested_tool == SuggestedTool.web_research
+        research_out: ResearchAgentOutput | None = None
+
+        # Routing decision: business/complex emails -> ResearchAgent.
+        needs_research = self._should_route_to_research(email=email, result=result)
         if needs_research:
-            self._research.run(
+            research_run = self._research.run(
                 ResearchAgentInput(
                     email=email,
-                    query=f"{email.subject or ''}\n{email.body_text}".strip()[:300],
+                    category=result.category if isinstance(result.category, Category) else None,
                 )
             )
-            # While research is stubbed, we keep behavior compatible: we do not change content,
-            # but we make the “needs human” posture slightly more conservative.
+            research_out = research_run.output
+            # Keep the external shape compatible, but annotate reasoning.
             result = result.model_copy(
                 update={
                     "needs_human_approval": True,
-                    "reasoning_notes": (result.reasoning_notes + " | Routed to ResearchAgent (stub).").strip(" |"),
-                    "confidence": min(float(result.confidence), 0.6),
+                    "reasoning_notes": (result.reasoning_notes + " | Routed to ResearchAgent.").strip(" |"),
+                    "confidence": min(float(result.confidence), 0.7),
                 }
             )
 
         # Draft agent: finalize draft text for review flows.
         if result.recommended_action != RecommendedAction.ignore:
-            draft_run = self._draft.run(DraftAgentInput(email=email, draft_reply=result.draft_reply))
+            draft_run = self._draft.run(DraftAgentInput(email=email, draft_reply=result.draft_reply, research=research_out))
             if draft_run.output is not None:
                 result = result.model_copy(update={"draft_reply": draft_run.output.draft_reply})
 
         return result
+
+    @staticmethod
+    def _should_route_to_research(*, email: EmailInput, result: AgentResult) -> bool:
+        """
+        Business rule: route to ResearchAgent for offer/partnership/collaboration/complex business inquiries.
+        """
+
+        if result.category in (Category.partnership, Category.sales_inquiry):
+            return True
+
+        text = ((email.subject or "") + "\n" + (email.body_text or "")).lower()
+        keywords = [
+            "oferta",
+            "propozycja",
+            "partnerstwo",
+            "współpraca",
+            "wspolpraca",
+            "wspólnie",
+            "wspolnie",
+            "proposal",
+            "partnership",
+            "collaboration",
+            "biznes",
+            "współdział",
+            "wspoldzial",
+        ]
+        if any(k in text for k in keywords):
+            return True
+
+        # Low confidence -> treat as complex.
+        try:
+            if float(result.confidence) < 0.45:
+                return True
+        except Exception:
+            return True
+
+        return False
 
