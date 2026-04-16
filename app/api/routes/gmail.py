@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.agents.email_agent import EmailAgent
 from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
+from app.agents.team.lead_scoring_agent import LeadScoringAgent
 from app.agents.team.research_agent import ResearchAgent
 from app.config import Settings, get_settings
 from app.api.routes.audit import get_audit_service
 from app.api.routes.drafts import get_draft_service
+from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
 from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
@@ -28,6 +30,7 @@ from app.schemas.gmail import (
     GmailMessagesListResponse,
 )
 from app.services.openai_client import OpenAIResponsesClient
+from app.leads.service import LeadService
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -44,11 +47,20 @@ def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) 
 def get_orchestrator(
     email_agent: EmailAgent = Depends(get_email_agent),
     audit: AuditLogService = Depends(get_audit_service),
+    leads: LeadService = Depends(get_lead_service),
 ) -> EmailOrchestrator:
     inbox_agent = InboxAgent(email_agent=email_agent)
     draft_agent = DraftAgent()
     research_agent = ResearchAgent()
-    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent, audit=audit)
+    lead_agent = LeadScoringAgent()
+    return EmailOrchestrator(
+        inbox_agent=inbox_agent,
+        draft_agent=draft_agent,
+        research_agent=research_agent,
+        lead_scoring_agent=lead_agent,
+        leads=leads,
+        audit=audit,
+    )
 
 
 def get_gmail_service(settings: Settings = Depends(get_settings)) -> GmailService:
@@ -105,6 +117,7 @@ def analyze_and_create_draft(
     orch: EmailOrchestrator = Depends(get_orchestrator),
     drafts: DraftApprovalService = Depends(get_draft_service),
     audit: AuditLogService = Depends(get_audit_service),
+    leads: LeadService = Depends(get_lead_service),
 ) -> GmailAnalyzeAndDraftResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
@@ -146,12 +159,14 @@ def analyze_and_create_draft(
                 metadata={"message_id": payload.message_id, "thread_id": msg.get("threadId")},
             )
             # Register for human approval (pending_review).
+            lead = leads.get(entity_id=payload.message_id)
             drafts.register_new_draft(
                 draft_id=draft_id,
                 provider="gmail",
                 message_id=payload.message_id,
                 thread_id=msg.get("threadId"),
                 draft_body=result.draft_reply,
+                lead_scoring=lead.scoring if lead else None,
             )
             audit.log(
                 entity_type=EntityType.draft,

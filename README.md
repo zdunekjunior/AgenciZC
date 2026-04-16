@@ -279,6 +279,26 @@ System zapisuje zdarzenia audytowe (in-memory, process-local), aby dało się od
 - wszystkie zdarzenia: `GET /audit/events?limit=200`
 - zdarzenia dla encji (np. draft_id lub message_id): `GET /audit/events/{entity_id}?limit=200`
 
+## Lead scoring + CRM handoff (foundation)
+System potrafi automatycznie ocenić wartość biznesową wybranych maili (oferta/partnerstwo/wdrożenie/współpraca).
+
+### Jak działa scoring
+- Dla maili o biznesowym charakterze orchestrator uruchamia `LeadScoringAgent` (heurystyki, bez web/CRM).
+- Wynik zapisywany jest jako lead przypięty do `message_id` (encja email).
+- Dodatkowo zapisywany jest audit event `lead_scored` z kluczowymi metadanymi.
+
+### Jak interpretować `lead_score` (0–100)
+- **0–39**: cold (niska szansa / mało sygnałów)
+- **40–69**: warm (warto dopytać i kwalifikować)
+- **70–100**: hot (wysoki priorytet handlowy)
+
+### Endpoint developerski
+- `GET /leads` — lista ocenionych leadów (admin-only)
+- `GET /leads/{message_id}` — szczegóły leada dla maila (admin-only)
+
+### CRM handoff (stub)
+Jest przygotowany `CRMHandoffService` jako stub pod przyszłą integrację z CRM (na razie bez wysyłania danych).
+
 ### Jak ustawić GitHub Secret
 1. Wejdź w repo na GitHub → **Settings** → **Secrets and variables** → **Actions**
 2. Kliknij **New repository secret**

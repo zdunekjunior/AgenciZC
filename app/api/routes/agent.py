@@ -8,10 +8,13 @@ from fastapi import APIRouter, Depends
 from app.agents.email_agent import EmailAgent
 from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
+from app.agents.team.lead_scoring_agent import LeadScoringAgent
 from app.agents.team.research_agent import ResearchAgent
 from app.api.routes.audit import get_audit_service
+from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
 from app.config import Settings, get_settings
+from app.leads.service import LeadService
 from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.schemas.email import AgentResult, AnalyzeEmailRequest, EmailInput
 from app.services.openai_client import OpenAIResponsesClient
@@ -31,11 +34,20 @@ def get_email_agent(client: OpenAIResponsesClient = Depends(get_openai_client)) 
 def get_orchestrator(
     email_agent: EmailAgent = Depends(get_email_agent),
     audit: AuditLogService = Depends(get_audit_service),
+    leads: LeadService = Depends(get_lead_service),
 ) -> EmailOrchestrator:
     inbox_agent = InboxAgent(email_agent=email_agent)
     draft_agent = DraftAgent()
     research_agent = ResearchAgent()
-    return EmailOrchestrator(inbox_agent=inbox_agent, draft_agent=draft_agent, research_agent=research_agent, audit=audit)
+    lead_agent = LeadScoringAgent()
+    return EmailOrchestrator(
+        inbox_agent=inbox_agent,
+        draft_agent=draft_agent,
+        research_agent=research_agent,
+        lead_scoring_agent=lead_agent,
+        leads=leads,
+        audit=audit,
+    )
 
 
 @router.post("/analyze-email", response_model=AgentResult)

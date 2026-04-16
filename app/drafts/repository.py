@@ -6,6 +6,7 @@ from threading import Lock
 
 from app.domain.drafts import DraftApprovalStatus
 from app.schemas.drafts import DraftRecord
+from app.schemas.leads import LeadScoring
 
 
 class DraftNotFoundError(KeyError):
@@ -19,6 +20,7 @@ class CreateDraftRecord:
     message_id: str | None = None
     thread_id: str | None = None
     draft_preview: str | None = None
+    lead_scoring: LeadScoring | None = None
 
 
 class DraftRepository:
@@ -61,6 +63,7 @@ class InMemoryDraftRepository(DraftRepository):
             draft_preview=rec.draft_preview,
             sent_at=None,
             last_error=None,
+            lead_scoring=rec.lead_scoring,
         )
         with self._lock:
             self._items[rec.draft_id] = record

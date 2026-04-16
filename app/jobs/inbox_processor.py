@@ -6,9 +6,11 @@ from typing import Any
 
 from app.api.routes.audit import get_audit_service
 from app.api.routes.drafts import get_draft_service
+from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
 from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
+from app.leads.service import LeadService
 from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.domain.enums import RecommendedAction
 from app.integrations.gmail.service import GmailService
@@ -49,6 +51,7 @@ class InboxProcessor:
         self._agent = agent
         self._drafts = drafts or get_draft_service()
         self._audit: AuditLogService = get_audit_service()
+        self._leads: LeadService = get_lead_service()
 
     def process_inbox(self, *, limit: int = 10, query: str | None = None) -> InboxProcessStats:
         if limit < 1:
@@ -120,6 +123,7 @@ class InboxProcessor:
                         message_id=mid,
                         thread_id=msg.get("threadId"),
                         draft_body=result.draft_reply,
+                        lead_scoring=(self._leads.get(entity_id=mid).scoring if self._leads.get(entity_id=mid) else None),
                     )
                     self._audit.log(
                         entity_type=EntityType.draft,

@@ -72,6 +72,11 @@ function setSelectedUI(d) {
   els("d_created_at").textContent = fmtTs(d?.created_at);
   els("d_status").textContent = d?.status || "—";
   els("d_preview").textContent = d?.draft_preview || "—";
+  const ls = d?.lead_scoring || null;
+  els("d_lead_score").textContent = ls ? String(ls.lead_score) : "—";
+  els("d_lead_temp").textContent = ls ? ls.lead_temperature : "—";
+  els("d_lead_intent").textContent = ls ? ls.business_intent : "—";
+  els("d_lead_priority").textContent = ls ? ls.sales_priority : "—";
 
   const has = !!d;
   els("approveBtn").disabled = !has;

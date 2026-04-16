@@ -4,10 +4,12 @@ from dataclasses import dataclass, field
 
 from app.agents.team.draft_agent import DraftAgent, DraftAgentInput
 from app.agents.team.inbox_agent import InboxAgent, InboxAgentInput
+from app.agents.team.lead_scoring_agent import LeadScoringAgent, LeadScoringAgentInput
 from app.agents.team.research_agent import ResearchAgent, ResearchAgentInput, ResearchAgentOutput
 from app.audit.service import AuditLogService
 from app.domain.audit import ActorType, EntityType
 from app.domain.enums import Category, RecommendedAction
+from app.leads.service import LeadService
 from app.schemas.email import AgentResult, EmailInput
 
 
@@ -34,11 +36,15 @@ class EmailOrchestrator:
         inbox_agent: InboxAgent,
         draft_agent: DraftAgent,
         research_agent: ResearchAgent,
+        lead_scoring_agent: LeadScoringAgent | None = None,
+        leads: LeadService | None = None,
         audit: AuditLogService | None = None,
     ) -> None:
         self._inbox = inbox_agent
         self._draft = draft_agent
         self._research = research_agent
+        self._lead = lead_scoring_agent
+        self._leads = leads
         self._audit = audit
 
     def handle_email(self, email: EmailInput) -> AgentResult:
@@ -105,7 +111,35 @@ class EmailOrchestrator:
             if draft_run.output is not None:
                 result = result.model_copy(update={"draft_reply": draft_run.output.draft_reply})
 
+        # Lead scoring (business-only) -> store + audit
+        if self._lead is not None and self._leads is not None and self._should_score_lead(email=email, result=result):
+            lead_run = self._lead.run(LeadScoringAgentInput(email=email, analysis=result, research=research_out))
+            if lead_run.output is not None:
+                self._leads.upsert(entity_id=email.message_id, scoring=lead_run.output)
+                if self._audit is not None:
+                    self._audit.log(
+                        entity_type=EntityType.email,
+                        entity_id=email.message_id,
+                        action="lead_scored",
+                        actor_type=ActorType.agent,
+                        actor_name="LeadScoringAgent",
+                        status="ok",
+                        metadata={
+                            "score": lead_run.output.lead_score,
+                            "temperature": lead_run.output.lead_temperature.value,
+                            "business_intent": lead_run.output.business_intent.value,
+                            "priority": lead_run.output.sales_priority.value,
+                        },
+                    )
+
         return result
+
+    @staticmethod
+    def _should_score_lead(*, email: EmailInput, result: AgentResult) -> bool:
+        if result.category in (Category.partnership, Category.sales_inquiry):
+            return True
+        text = ((email.subject or "") + "\n" + (email.body_text or "")).lower()
+        return any(k in text for k in ["oferta", "partnerstwo", "współpraca", "wspolpraca", "wdroż", "wdroze", "implement"])
 
     @staticmethod
     def _should_route_to_research(*, email: EmailInput, result: AgentResult) -> bool:

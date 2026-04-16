@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.domain.drafts import DraftApprovalStatus
 from app.drafts.repository import CreateDraftRecord, DraftNotFoundError, DraftRepository
 from app.schemas.drafts import DraftRecord
+from app.schemas.leads import LeadScoring
 
 
 class DraftInvalidStateError(RuntimeError):
@@ -21,6 +22,7 @@ class DraftApprovalService:
         message_id: str | None = None,
         thread_id: str | None = None,
         draft_body: str | None = None,
+        lead_scoring: LeadScoring | None = None,
     ) -> DraftRecord:
         preview = None
         if draft_body:
@@ -32,6 +34,7 @@ class DraftApprovalService:
                 message_id=message_id,
                 thread_id=thread_id,
                 draft_preview=preview,
+                lead_scoring=lead_scoring,
             )
         )
 
