@@ -67,6 +67,16 @@ uvicorn app.main:app --reload
 2. Wejdź w przeglądarce:
 - `http://127.0.0.1:8000/admin`
 
+### Jak zabezpieczyć (admin auth MVP)
+Ustaw w `.env`:
+
+```env
+ADMIN_PANEL_PASSWORD="twoje_haslo_admina"
+```
+
+Po wejściu na `/admin` zobaczysz ekran logowania. Po zalogowaniu backend ustawia cookie sesyjne (HttpOnly).  
+Endpointy admin-only (`/drafts/*`, `/audit/*`) zwracają `401` bez tej sesji.
+
 ### Jak używać (flow)
 1. **Pending**: po lewej wybierz draft z listy `pending_review`.
 2. **Szczegóły**: po prawej zobaczysz metadane i preview.

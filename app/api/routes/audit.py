@@ -4,11 +4,12 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends
 
+from app.auth.admin_auth import require_admin_session
 from app.audit.repository import InMemoryAuditRepository
 from app.audit.service import AuditLogService
 from app.schemas.audit import AuditEventsResponse
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin_session)])
 
 
 @lru_cache(maxsize=1)

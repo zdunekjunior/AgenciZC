@@ -6,6 +6,11 @@ from app.main import create_app
 
 
 def test_audit_events_for_draft_lifecycle(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     from app.api.routes.audit import get_audit_service
     from app.api.routes.drafts import get_draft_service, get_gmail_service_optional
     from app.audit.repository import InMemoryAuditRepository
@@ -28,6 +33,7 @@ def test_audit_events_for_draft_lifecycle(monkeypatch) -> None:  # type: ignore[
     app.dependency_overrides[get_gmail_service_optional] = lambda: StubGmail()
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
 
     # approve -> audit
     r1 = client.post("/drafts/d1/approve")
@@ -52,6 +58,11 @@ def test_audit_events_for_draft_lifecycle(monkeypatch) -> None:  # type: ignore[
 
 
 def test_audit_event_on_reject(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     from app.api.routes.audit import get_audit_service
     from app.api.routes.drafts import get_draft_service
     from app.audit.repository import InMemoryAuditRepository
@@ -69,6 +80,7 @@ def test_audit_event_on_reject(monkeypatch) -> None:  # type: ignore[no-untyped-
     app.dependency_overrides[get_draft_service] = lambda: drafts
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
 
     r = client.post("/drafts/d2/reject")
     assert r.status_code == 200

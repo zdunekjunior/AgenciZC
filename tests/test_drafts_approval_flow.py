@@ -16,6 +16,11 @@ def test_pending_list_approve_reject_flow(monkeypatch) -> None:  # type: ignore[
     from app.domain.enums import Category, Priority, RecommendedAction, SuggestedTool
     from app.schemas.email import AgentResult
 
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     app = create_app()
 
     # Use a fresh repo/service per test.
@@ -74,6 +79,7 @@ def test_pending_list_approve_reject_flow(monkeypatch) -> None:  # type: ignore[
     app.dependency_overrides[get_orchestrator] = lambda: StubOrch()
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
 
     # Create draft (registers pending_review)
     resp = client.post("/gmail/analyze-and-create-draft", json={"message_id": "m1"})

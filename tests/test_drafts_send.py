@@ -6,6 +6,11 @@ from app.main import create_app
 
 
 def test_send_requires_approved(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     from app.api.routes.drafts import get_draft_service, get_gmail_service_optional
     from app.drafts.repository import InMemoryDraftRepository
     from app.drafts.service import DraftApprovalService
@@ -19,12 +24,18 @@ def test_send_requires_approved(monkeypatch) -> None:  # type: ignore[no-untyped
     app.dependency_overrides[get_gmail_service_optional] = lambda: None
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
     resp = client.post("/drafts/d1/send")
     assert resp.status_code == 409
     assert "not approved" in resp.text
 
 
 def test_send_after_approve_marks_sent_and_sets_sent_at(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     from app.api.routes.drafts import get_draft_service, get_gmail_service_optional
     from app.drafts.repository import InMemoryDraftRepository
     from app.drafts.service import DraftApprovalService
@@ -49,6 +60,7 @@ def test_send_after_approve_marks_sent_and_sets_sent_at(monkeypatch) -> None:  #
     app.dependency_overrides[get_gmail_service_optional] = lambda: stub
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
     resp = client.post("/drafts/d1/send")
     assert resp.status_code == 200
     data = resp.json()["draft"]
@@ -58,6 +70,11 @@ def test_send_after_approve_marks_sent_and_sets_sent_at(monkeypatch) -> None:  #
 
 
 def test_cannot_send_twice(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "pw")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
     from app.api.routes.drafts import get_draft_service, get_gmail_service_optional
     from app.drafts.repository import InMemoryDraftRepository
     from app.drafts.service import DraftApprovalService
@@ -73,5 +90,6 @@ def test_cannot_send_twice(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     app.dependency_overrides[get_gmail_service_optional] = lambda: None
 
     client = TestClient(app)
+    assert client.post("/admin/login", json={"password": "pw"}).status_code == 200
     resp = client.post("/drafts/d1/send")
     assert resp.status_code == 409

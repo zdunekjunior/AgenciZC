@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Jobs / scheduler
     job_secret: str | None = Field(default=None, alias="JOB_SECRET")
 
+    # Admin panel (MVP auth)
+    admin_panel_password: str | None = Field(default=None, alias="ADMIN_PANEL_PASSWORD")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inbox Assistant — Admin Login</title>
+    <link rel="stylesheet" href="/admin/assets/admin.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__title">Inbox Assistant</div>
+        <div class="brand__subtitle">Admin login</div>
+      </div>
+    </header>
+
+    <main class="layout" style="grid-template-columns: 1fr;">
+      <section class="panel" style="min-height:auto;">
+        <div class="panel__header">
+          <h2>Logowanie</h2>
+          <div class="muted">Wymagane hasło administratora</div>
+        </div>
+        <div class="panel__body">
+          <form id="loginForm" class="card" style="max-width:520px;">
+            <div class="card__title">ADMIN_PANEL_PASSWORD</div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input
+                id="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Hasło"
+                style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:rgba(5,10,16,.6); color:var(--text);"
+                required
+              />
+              <button class="btn btn--primary" type="submit">Zaloguj</button>
+            </div>
+            <div class="muted" style="margin-top:10px;">
+              Hasło jest weryfikowane po stronie backendu. Cookie sesyjne jest HttpOnly.
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/admin/assets/login.js"></script>
+  </body>
+</html>
+

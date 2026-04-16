@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth.admin_auth import require_admin_session
 from app.domain.drafts import DraftApprovalStatus
 from app.drafts.repository import InMemoryDraftRepository
 from app.drafts.service import DraftApprovalService
@@ -14,7 +15,7 @@ from app.integrations.gmail.service import GmailNotConfiguredError, GmailService
 from app.config import Settings, get_settings
 from app.schemas.drafts import DraftActionResponse, PendingDraftsResponse
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin_session)])
 
 
 @lru_cache(maxsize=1)

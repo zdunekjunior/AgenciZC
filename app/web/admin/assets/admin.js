@@ -150,6 +150,14 @@ function bind() {
   els("refreshBtn").addEventListener("click", async () => {
     try { await loadPending(); toast("Odświeżono", "ok"); } catch (e) { toast(e.message, "err"); }
   });
+  els("logoutBtn").addEventListener("click", async () => {
+    try {
+      await api("/admin/logout", { method: "POST" });
+      window.location.href = "/admin";
+    } catch (e) {
+      toast(`Logout failed: ${e.message}`, "err");
+    }
+  });
   els("approveBtn").addEventListener("click", () => doAction("approve"));
   els("rejectBtn").addEventListener("click", () => doAction("reject"));
   els("sendBtn").addEventListener("click", () => doAction("send"));
