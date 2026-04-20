@@ -13,11 +13,7 @@ git clone <URL_DO_REPO>
 cd Agent_1LLM
 ```
 
-2. Utwórz i uzupełnij `.env`:
-
-```bash
-cp .env.example .env
-```
+2. Uzupełnij `.env` (zobacz `.env.example` jako referencję kluczy).
 
 3. Zainstaluj zależności i uruchom:
 
@@ -40,7 +36,7 @@ pip install -r requirements.txt
 2. Skonfiguruj środowisko:
 
 ```bash
-cp .env.example .env
+touch .env
 ```
 
 3. Uruchom API:
@@ -88,13 +84,7 @@ Endpointy admin-only (`/drafts/*`, `/audit/*`) zwracają `401` bez tej sesji.
 5. **Audit**: na dole widać historię zdarzeń z `GET /audit/events/{draft_id}`.
 
 ## OpenAI: jak włączyć prawdziwy model
-1. Skopiuj `.env.example` do `.env`:
-
-```bash
-cp .env.example .env
-```
-
-2. Ustaw klucz i (opcjonalnie) model:
+1. Ustaw klucz i (opcjonalnie) model w `.env`:
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -104,6 +94,47 @@ OPENAI_MODEL=gpt-5.4
 3. Uruchom aplikację i sprawdź logi:
 - Gdy działa prawdziwe OpenAI zobaczysz log w stylu: `OpenAI MODE enabled. model=...`
 - Gdy fallback/mock: `OpenAI MODE disabled -> MOCK MODE ...` albo `falling back to MOCK stub`
+
+## Docelowy zespół agentów (“firma 5-osobowa”)
+Ten projekt ma już fundament pod docelowy model “małej firmy” z orchestrator-em i współdzielonym `CaseContext`.
+
+- Opis ról, kontraktów, współpracy i fundamentu “learning without training” jest w `docs/ARCHITECTURE_TEAM.md`.
+
+## CaseContext (wspólna “teczka sprawy”)
+`CaseContext` to współdzielony rekord sprawy, do którego dopisują agenci i orchestrator (research/lead/draft/audit).
+
+- **Po co**: zamiast “latających” rezultatów per-endpoint, mamy jeden spójny kontekst sprawy pod współpracę agentów, panel admina i przyszłe “learning without training”.
+- **Gdzie**:
+  - model: `app/cases/models.py`
+  - repo/service (na razie in-memory, gotowe pod DB): `app/cases/repository.py`, `app/cases/service.py`
+  - dev endpointy (admin-only): `GET /cases`, `GET /cases/{case_id}`
+
+## SalesAgent (firmowy agent sprzedaży)
+`SalesAgent` wykonuje operacyjną ocenę spraw biznesowych na bazie `CaseContext` i zapisuje do sprawy:
+- `lead_stage`
+- `recommended_next_action`
+- `follow_up_plan`
+- `sales_notes`
+
+### Kiedy orchestrator go uruchamia
+Orchestrator uruchamia `SalesAgent` dla spraw biznesowych (np. `sales_inquiry`, `partnership`) oraz wtedy, gdy sprawa została skierowana do research.
+
+### Dev endpoint
+- `POST /sales/review` (admin-only) — ręczny test SalesAgent na bazie `case_id` lub payloadu maila
+
+## ProfessorAgent (agent ekspercki)
+`ProfessorAgent` przygotowuje merytoryczną analizę sprawy na bazie `CaseContext`:
+- `expert_summary`
+- `domain_context`
+- `key_risks`
+- `key_questions`
+- `recommended_expert_next_step`
+
+### Kiedy orchestrator go uruchamia
+Orchestrator uruchamia `ProfessorAgent` dla spraw złożonych/strategicznych (np. wdrożenia, partnerstwa) oraz dla spraw, które przeszły przez research.
+
+### Dev endpoint
+- `POST /professor/review` (admin-only) — ręczny test ProfessorAgent na bazie `case_id` lub payloadu maila
 
 ## Endpointy
 - `GET /health` — health check

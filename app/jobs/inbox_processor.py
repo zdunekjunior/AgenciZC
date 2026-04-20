@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.api.routes.audit import get_audit_service
+from app.api.routes.cases import get_case_service
 from app.api.routes.drafts import get_draft_service
 from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
+from app.cases.service import CaseService
 from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
 from app.leads.service import LeadService
@@ -52,6 +54,7 @@ class InboxProcessor:
         self._drafts = drafts or get_draft_service()
         self._audit: AuditLogService = get_audit_service()
         self._leads: LeadService = get_lead_service()
+        self._cases: CaseService = get_case_service()
 
     def process_inbox(self, *, limit: int = 10, query: str | None = None) -> InboxProcessStats:
         if limit < 1:
@@ -87,6 +90,8 @@ class InboxProcessor:
             except Exception:  # noqa: BLE001
                 log.exception("Failed to fetch message/thread for processing")
                 continue
+
+            case = self._cases.get_or_create_from_email(email=email_input, source_type="job")
 
             result: AgentResult = self._agent.handle_email(email_input)
             analyzed += 1
@@ -134,6 +139,8 @@ class InboxProcessor:
                         status="ok",
                         metadata={},
                     )
+                    case = self._cases.link_draft_id(case=case, draft_id=draft_id)
+                    case = self._cases.touch_status(case=case, status="draft_linked")
                     self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_DRAFT_CREATED])
                 except Exception:  # noqa: BLE001
                     log.exception("Draft creation failed; marking as skipped")

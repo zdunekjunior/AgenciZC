@@ -3,6 +3,7 @@ const els = (id) => document.getElementById(id);
 const state = {
   pending: [],
   selected: null,
+  cases: [],
 };
 
 function fmtTs(iso) {
@@ -36,6 +37,50 @@ async function api(path, opts = {}) {
     throw new Error(`${res.status} ${res.statusText}${detail}`);
   }
   return json;
+}
+
+function yn(v) {
+  return v ? "yes" : "—";
+}
+
+function trunc(s, n = 80) {
+  if (!s) return "—";
+  const t = String(s);
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
+function renderCases() {
+  const tbody = els("casesTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  const rows = state.cases || [];
+  els("casesMeta").textContent = `${rows.length} item(s)`;
+  els("casesEmpty").classList.toggle("hidden", rows.length !== 0);
+  els("casesTable").classList.toggle("hidden", rows.length === 0);
+
+  for (const c of rows) {
+    const tr = document.createElement("tr");
+    const agents = (c.assigned_agents || []).join(", ");
+    const drafts = (c.draft_ids || []).length ? String((c.draft_ids || []).length) : "—";
+    const risksN = Array.isArray(c.key_risks) ? c.key_risks.length : 0;
+    const qN = Array.isArray(c.key_questions) ? c.key_questions.length : 0;
+    tr.innerHTML = `
+      <td class="mono">${c.case_id}</td>
+      <td>${c.subject || "—"}</td>
+      <td>${c.current_status || "—"}</td>
+      <td>${c.lead_stage || "—"}</td>
+      <td>${c.recommended_next_action || "—"}</td>
+      <td>${yn(c.expert_summary)}</td>
+      <td>${risksN ? String(risksN) : "—"}</td>
+      <td>${qN ? String(qN) : "—"}</td>
+      <td>${trunc(c.recommended_expert_next_step, 70)}</td>
+      <td>${agents || "—"}</td>
+      <td>${drafts}</td>
+      <td>${yn(c.lead_summary)}</td>
+      <td>${yn(c.research_summary)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
 }
 
 function renderPending() {
@@ -116,6 +161,12 @@ async function loadPending() {
   renderPending();
 }
 
+async function loadCases() {
+  const rows = await api("/cases?limit=50");
+  state.cases = Array.isArray(rows) ? rows : [];
+  renderCases();
+}
+
 async function selectDraft(draftId) {
   const d = state.pending.find((x) => x.draft_id === draftId) || null;
   state.selected = d;
@@ -154,6 +205,7 @@ async function doAction(kind) {
 function bind() {
   els("refreshBtn").addEventListener("click", async () => {
     try { await loadPending(); toast("Odświeżono", "ok"); } catch (e) { toast(e.message, "err"); }
+    try { await loadCases(); } catch (e) { /* ignore */ }
   });
   els("logoutBtn").addEventListener("click", async () => {
     try {
@@ -174,6 +226,7 @@ async function boot() {
   renderAudit([]);
   try {
     await loadPending();
+    await loadCases();
   } catch (e) {
     toast(`Nie udało się pobrać pending drafts: ${e.message}`, "err");
   }

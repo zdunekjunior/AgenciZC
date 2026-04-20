@@ -10,11 +10,15 @@ from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
 from app.agents.team.lead_scoring_agent import LeadScoringAgent
 from app.agents.team.research_agent import ResearchAgent
+from app.agents.company.sales_agent import SalesAgent
+from app.agents.company.professor_agent import ProfessorAgent
 from app.config import Settings, get_settings
 from app.api.routes.audit import get_audit_service
+from app.api.routes.cases import get_case_service
 from app.api.routes.drafts import get_draft_service
 from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
+from app.cases.service import CaseService
 from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
 from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
@@ -48,17 +52,23 @@ def get_orchestrator(
     email_agent: EmailAgent = Depends(get_email_agent),
     audit: AuditLogService = Depends(get_audit_service),
     leads: LeadService = Depends(get_lead_service),
+    cases: CaseService = Depends(get_case_service),
 ) -> EmailOrchestrator:
     inbox_agent = InboxAgent(email_agent=email_agent)
     draft_agent = DraftAgent()
     research_agent = ResearchAgent()
     lead_agent = LeadScoringAgent()
+    sales_agent = SalesAgent()
+    prof_agent = ProfessorAgent()
     return EmailOrchestrator(
         inbox_agent=inbox_agent,
         draft_agent=draft_agent,
         research_agent=research_agent,
         lead_scoring_agent=lead_agent,
+        sales_agent=sales_agent,
+        professor_agent=prof_agent,
         leads=leads,
+        cases=cases,
         audit=audit,
     )
 
@@ -95,12 +105,14 @@ def analyze_message(
     payload: GmailMessageRequest,
     gmail: GmailService = Depends(get_gmail_service),
     orch: EmailOrchestrator = Depends(get_orchestrator),
+    cases: CaseService = Depends(get_case_service),
 ) -> GmailAnalyzeResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
         email_input = gmail.fetch_email_input(message_id=payload.message_id)
     except GmailApiError as exc:
         raise _map_gmail_error(exc) from exc
+    cases.get_or_create_from_email(email=email_input, source_type="gmail")
     result: AgentResult = orch.handle_email(email_input)
 
     return GmailAnalyzeResult(
@@ -118,12 +130,14 @@ def analyze_and_create_draft(
     drafts: DraftApprovalService = Depends(get_draft_service),
     audit: AuditLogService = Depends(get_audit_service),
     leads: LeadService = Depends(get_lead_service),
+    cases: CaseService = Depends(get_case_service),
 ) -> GmailAnalyzeAndDraftResult:
     try:
         msg = gmail.fetch_message(message_id=payload.message_id)
         email_input = gmail.fetch_email_input(message_id=payload.message_id)
     except GmailApiError as exc:
         raise _map_gmail_error(exc) from exc
+    case = cases.get_or_create_from_email(email=email_input, source_type="gmail")
     result: AgentResult = orch.handle_email(email_input)
 
     draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason=None)
@@ -177,6 +191,8 @@ def analyze_and_create_draft(
                 status="ok",
                 metadata={},
             )
+            case = cases.link_draft_id(case=case, draft_id=draft_id)
+            case = cases.touch_status(case=case, status="draft_linked")
         except HTTPException as exc:
             draft_status = GmailDraftResult(status="error", draft_id=None, error=str(exc.detail), reason=None)
         except Exception as exc:  # noqa: BLE001

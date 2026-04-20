@@ -10,9 +10,13 @@ from app.agents.team.draft_agent import DraftAgent
 from app.agents.team.inbox_agent import InboxAgent
 from app.agents.team.lead_scoring_agent import LeadScoringAgent
 from app.agents.team.research_agent import ResearchAgent
+from app.agents.company.sales_agent import SalesAgent
+from app.agents.company.professor_agent import ProfessorAgent
 from app.api.routes.audit import get_audit_service
+from app.api.routes.cases import get_case_service
 from app.api.routes.leads import get_lead_service
 from app.audit.service import AuditLogService
+from app.cases.service import CaseService
 from app.config import Settings, get_settings
 from app.integrations.gmail.service import GmailNotConfiguredError, GmailService
 from app.jobs.inbox_processor import InboxProcessor
@@ -37,17 +41,23 @@ def get_orchestrator(
     email_agent: EmailAgent = Depends(get_email_agent),
     audit: AuditLogService = Depends(get_audit_service),
     leads: LeadService = Depends(get_lead_service),
+    cases: CaseService = Depends(get_case_service),
 ) -> EmailOrchestrator:
     inbox_agent = InboxAgent(email_agent=email_agent)
     draft_agent = DraftAgent()
     research_agent = ResearchAgent()
     lead_agent = LeadScoringAgent()
+    sales_agent = SalesAgent()
+    prof_agent = ProfessorAgent()
     return EmailOrchestrator(
         inbox_agent=inbox_agent,
         draft_agent=draft_agent,
         research_agent=research_agent,
         lead_scoring_agent=lead_agent,
+        sales_agent=sales_agent,
+        professor_agent=prof_agent,
         leads=leads,
+        cases=cases,
         audit=audit,
     )
 

@@ -122,6 +122,38 @@
       </section>
     </main>
 
+    <main class="layout">
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Cases (dev view)</h2>
+          <div class="muted" id="casesMeta">—</div>
+        </div>
+        <div class="panel__body">
+          <div id="casesEmpty" class="empty hidden">Brak spraw.</div>
+          <table class="table" id="casesTable">
+            <thead>
+              <tr>
+                <th>case_id</th>
+                <th>subject</th>
+                <th>status</th>
+                <th>lead_stage</th>
+                <th>next_action</th>
+                <th>expert</th>
+                <th>key_risks</th>
+                <th>key_questions</th>
+                <th>expert_next_step</th>
+                <th>assigned_agents</th>
+                <th>drafts</th>
+                <th>lead</th>
+                <th>research</th>
+              </tr>
+            </thead>
+            <tbody id="casesTbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <div id="toast" class="toast hidden"></div>
 
     <script src="/admin/assets/admin.js"></script>
