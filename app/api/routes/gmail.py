@@ -23,6 +23,7 @@ from app.domain.audit import ActorType, EntityType
 from app.drafts.service import DraftApprovalService
 from app.integrations.gmail.service import GmailApiError, GmailNotConfiguredError, GmailService
 from app.domain.enums import RecommendedAction
+from app.gatekeeper.inbox_gatekeeper import DECISION_REVIEW_ONLY
 from app.orchestrator.email_orchestrator import EmailOrchestrator
 from app.schemas.email import AgentResult
 from app.schemas.gmail import (
@@ -154,9 +155,11 @@ def analyze_and_create_draft(
         metadata={"thread_id": msg.get("threadId")},
     )
 
-    # Hard block: do not create drafts for ignore/system/no-reply.
-    if result.recommended_action == RecommendedAction.ignore or not (result.draft_reply and result.draft_reply.strip()):
+    # Gatekeeper policy: create drafts only for reply_needed.
+    if result.recommended_action != RecommendedAction.draft_for_review or not (result.draft_reply and result.draft_reply.strip()):
         draft_status = GmailDraftResult(status="skipped", draft_id=None, error=None, reason="auto_system_message")
+        if result.recommended_action == RecommendedAction.ask_human:
+            label_names = ["AI/Analyzed", "AI/ReviewOnly"]
     else:
         try:
             draft_id = gmail.create_reply_draft(original_message=msg, draft_reply=result.draft_reply)

@@ -63,6 +63,18 @@ class CaseService:
         note = CaseNote(timestamp=now, author=author, kind=kind, text=text, metadata=metadata or {})
         return self._repo.upsert(ctx=case.model_copy(update={"notes": [*case.notes, note]}))
 
+    def set_inbox_decision(self, *, case: CaseContext, decision: str, reason: str, skipped_reason: str | None = None) -> CaseContext:
+        return self._repo.upsert(
+            ctx=case.model_copy(
+                update={
+                    "inbox_decision": decision,
+                    "inbox_decision_reason": reason,
+                    "draft_policy": "draft_only_for_reply_needed",
+                    "draft_skipped_reason": skipped_reason,
+                }
+            )
+        )
+
     def set_research_summary(self, *, case: CaseContext, research_summary: str) -> CaseContext:
         return self._repo.upsert(ctx=case.model_copy(update={"research_summary": research_summary}))
 

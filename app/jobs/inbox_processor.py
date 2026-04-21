@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 LABEL_PROCESSED = "AI/Processed"
 LABEL_DRAFT_CREATED = "AI/DraftCreated"
 LABEL_SKIPPED = "AI/Skipped"
+LABEL_REVIEW_ONLY = "AI/ReviewOnly"
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,7 @@ class InboxProcessor:
             )
 
             action = result.recommended_action
-            create_draft = action != RecommendedAction.ignore and bool(result.draft_reply and result.draft_reply.strip())
+            create_draft = action == RecommendedAction.draft_for_review and bool(result.draft_reply and result.draft_reply.strip())
 
             if create_draft:
                 try:
@@ -148,7 +149,10 @@ class InboxProcessor:
                     self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_SKIPPED])
             else:
                 skipped += 1
-                self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_SKIPPED])
+                if action == RecommendedAction.ask_human:
+                    self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_REVIEW_ONLY])
+                else:
+                    self._gmail.apply_labels(message_id=mid, label_names=[LABEL_PROCESSED, LABEL_SKIPPED])
 
             processed_ids.append(mid)
 

@@ -65,6 +65,12 @@ class CaseContext(BaseModel):
     current_status: str = Field(default="open", description="open|analyzed|research_added|lead_added|draft_linked|closed")
     assigned_agents: list[str] = Field(default_factory=list)
 
+    # Gatekeeper decision (Secretary/gatekeeper layer)
+    inbox_decision: str | None = Field(default=None, description="reply_needed|review_only|ignore")
+    inbox_decision_reason: str | None = None
+    draft_policy: str | None = Field(default=None, description="draft_only_for_reply_needed")
+    draft_skipped_reason: str | None = None
+
     # Cross-agent shared artifacts (summaries)
     notes: list[CaseNote] = Field(default_factory=list)
     research_summary: str | None = None

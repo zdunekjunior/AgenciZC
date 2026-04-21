@@ -68,6 +68,7 @@ function renderCases() {
       <td class="mono">${c.case_id}</td>
       <td>${c.subject || "—"}</td>
       <td>${c.current_status || "—"}</td>
+      <td>${c.inbox_decision || "—"}</td>
       <td>${c.lead_stage || "—"}</td>
       <td>${c.recommended_next_action || "—"}</td>
       <td>${yn(c.expert_summary)}</td>

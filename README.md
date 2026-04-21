@@ -136,6 +136,18 @@ Orchestrator uruchamia `ProfessorAgent` dla spraw złożonych/strategicznych (np
 ### Dev endpoint
 - `POST /professor/review` (admin-only) — ręczny test ProfessorAgent na bazie `case_id` lub payloadu maila
 
+## Gatekeeper (inbox decision)
+System ma warstwę “sekretarki/gatekeepera”, która ogranicza tworzenie draftów do wiadomości, które realnie wymagają odpowiedzi.
+
+### Decyzje
+- `reply_needed` — **tworzymy draft** (reply ma sens)
+- `review_only` — **nie tworzymy draftu** (do przejrzenia, zwykle transakcyjne/marketing)
+- `ignore` — **nie tworzymy draftu** (no-reply / alerty / automaty)
+
+### Polityka draftów
+- Draft jest tworzony **tylko** dla `reply_needed`.
+- Jeśli model ma niską pewność, gatekeeper domyślnie wybiera **`review_only`** (bezpiecznie, mniej false positives).
+
 ## Endpointy
 - `GET /health` — health check
 - `POST /agent/analyze-email` — analiza maila i draft odpowiedzi

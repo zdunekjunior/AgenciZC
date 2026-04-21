@@ -12,6 +12,7 @@ from app.agents.company.professor_agent import ProfessorAgent, ProfessorAgentInp
 from app.cases.service import CaseService
 from app.domain.audit import ActorType, EntityType
 from app.domain.enums import Category, RecommendedAction
+from app.gatekeeper.inbox_gatekeeper import DECISION_IGNORE, DECISION_REPLY_NEEDED, decide_inbox
 from app.leads.service import LeadService
 from app.schemas.email import AgentResult, EmailInput
 
@@ -91,6 +92,41 @@ class EmailOrchestrator:
         if case is not None and self._cases is not None:
             case = self._cases.add_assigned_agent(case=case, agent_name=getattr(self._inbox, "name", "InboxAgent"))
 
+        # Gatekeeper: decide whether a draft should be created at all.
+        gate = decide_inbox(email=email, analysis=result)
+        # If backend rules already require human approval, we still allow a draft-for-review
+        # (human-in-the-loop), unless it's a hard ignore.
+        if bool(result.needs_human_approval) and gate.decision != DECISION_IGNORE:
+            from app.gatekeeper.inbox_gatekeeper import GatekeeperResult  # local import to avoid cycles
+
+            gate = GatekeeperResult(decision=DECISION_REPLY_NEEDED, reason=f"{gate.reason}|needs_human_approval_override", confidence=gate.confidence)
+        if case is not None and self._cases is not None:
+            skipped_reason = gate.reason if gate.decision != DECISION_REPLY_NEEDED else None
+            case = self._cases.set_inbox_decision(case=case, decision=gate.decision, reason=gate.reason, skipped_reason=skipped_reason)
+            if self._audit is not None:
+                ev = self._audit.log(
+                    entity_type=EntityType.workflow,
+                    entity_id=email.message_id,
+                    action="inbox_decision_recorded",
+                    actor_type=ActorType.orchestrator,
+                    actor_name="EmailOrchestrator",
+                    status="info",
+                    metadata={"decision": gate.decision, "reason": gate.reason, "gk_confidence": gate.confidence},
+                )
+                case = self._cases.link_audit_event_id(case=case, event_id=ev.event_id)
+
+        # Enforce policy on external result shape:
+        # - ignore/review_only -> no draft content (prevents downstream draft creation)
+        # - ignore -> recommended_action=ignore
+        if gate.decision != DECISION_REPLY_NEEDED:
+            result = result.model_copy(
+                update={
+                    "draft_reply": "",
+                    "recommended_action": RecommendedAction.ignore if gate.decision == DECISION_IGNORE else RecommendedAction.ask_human,
+                    "reasoning_notes": (result.reasoning_notes + f" | Gatekeeper:{gate.decision}:{gate.reason}").strip(" |"),
+                    "confidence": min(float(result.confidence), 0.7),
+                }
+            )
         research_out: ResearchAgentOutput | None = None
 
         # Routing decision: business/complex emails -> ResearchAgent.
@@ -133,8 +169,8 @@ class EmailOrchestrator:
                 }
             )
 
-        # Draft agent: finalize draft text for review flows.
-        if result.recommended_action != RecommendedAction.ignore:
+        # Draft agent: finalize draft text only when gatekeeper says reply_needed.
+        if gate.decision == DECISION_REPLY_NEEDED and result.recommended_action != RecommendedAction.ignore:
             if case is not None and self._cases is not None:
                 case = self._cases.add_assigned_agent(case=case, agent_name=getattr(self._draft, "name", "DraftAgent"))
             draft_run = self._draft.run(DraftAgentInput(email=email, draft_reply=result.draft_reply, research=research_out))
